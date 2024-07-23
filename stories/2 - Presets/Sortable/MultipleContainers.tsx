@@ -170,12 +170,13 @@ export function MultipleContainers({
   const [items, setItems] = useState<Items>(
     () =>
       initialItems ?? {
-        A: createRange(itemCount, (index) => `A${index + 1}`),
+        A: createRange(itemCount, (index) => `A${index + 1}`).concat(['New']),
         B: createRange(itemCount, (index) => `B${index + 1}`),
-        C: createRange(itemCount, (index) => `C${index + 1}`),
-        D: createRange(itemCount, (index) => `D${index + 1}`),
+        // C: createRange(itemCount, (index) => `C${index + 1}`),
+        // D: createRange(itemCount, (index) => `D${index + 1}`),
       }
   );
+  // console.log('items', items)
   const [containers, setContainers] = useState(
     Object.keys(items) as UniqueIdentifier[]
   );
@@ -299,6 +300,38 @@ export function MultipleContainers({
     });
   }, [items]);
 
+  const [isSelecting, setIsSelecting] = useState<boolean>(false);
+  const [startingIndex, setStartingIndex] = useState<any>(null);
+  const [finalIndex, setFinalIndex] = useState<any>(null);
+
+  const [startingContainer, setStartingContainer] = useState<any>(null);
+  const [endContainer, setEndContainer] = useState<any>(null);
+
+  const isSelected = (id: any ) => {
+    // if (!isSelecting) {
+    //   return false;
+    // }
+
+    const itemContainer: any = findContainer(id)
+    const itemIndex = getIndex(id)
+
+    const firstContainer = startingContainer >= endContainer ? endContainer : startingContainer;
+    const lastContainer = startingContainer >= endContainer ? startingContainer : endContainer;
+    const firstItemIdx = startingIndex >= finalIndex ? finalIndex : startingIndex;
+    const endItemIdx = startingIndex >= finalIndex ? startingIndex : finalIndex;
+
+    if (
+          (firstContainer !== null && itemContainer >= firstContainer)
+      && (lastContainer !== null && itemContainer <= lastContainer)   
+      && (firstItemIdx !== null && itemIndex >= firstItemIdx)
+      && (endItemIdx !== null && itemIndex <= endItemIdx)
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -309,10 +342,14 @@ export function MultipleContainers({
         },
       }}
       onDragStart={({active}) => {
+        console.log('on drag start!')
         setActiveId(active.id);
         setClonedItems(items);
       }}
       onDragOver={({active, over}) => {
+        console.log('onDragOver');
+        console.log(active); // This is the element we're dragging
+        console.log(over); // This is the element we're dropping onto
         const overId = over?.id;
 
         if (overId == null || overId === TRASH_ID || active.id in items) {
@@ -322,6 +359,8 @@ export function MultipleContainers({
         const overContainer = findContainer(overId);
         const activeContainer = findContainer(active.id);
 
+        console.log('overContainer', overContainer);
+        console.log('activeContainer', activeContainer);
         if (!overContainer || !activeContainer) {
           return;
         }
@@ -371,6 +410,7 @@ export function MultipleContainers({
       }}
       onDragEnd={({active, over}) => {
         if (active.id in items && over?.id) {
+          console.log("same container?")
           setContainers((containers) => {
             const activeIndex = containers.indexOf(active.id);
             const overIndex = containers.indexOf(over.id);
@@ -379,6 +419,7 @@ export function MultipleContainers({
           });
         }
 
+        console.log('onDragEnd')
         const activeContainer = findContainer(active.id);
 
         if (!activeContainer) {
@@ -428,13 +469,42 @@ export function MultipleContainers({
           const overIndex = items[overContainer].indexOf(overId);
 
           if (activeIndex !== overIndex) {
+            console.log('new index!')
+            const newArray = items[overContainer].slice();
+            const from = activeIndex; // original item
+            const to = overIndex; // new place
+            console.log('from', from);
+            console.log('to', to);
+
+            let pieceArray: any[] = [];
+
+            if (overIndex < activeIndex) {
+              // item is moved to earlier
+              // 1 - 2<new> - 3 - 4<old> - 5
+              const start = newArray.slice(0, to)
+              const newItem = items[overContainer][activeIndex]
+              const between = newArray.slice(overIndex, activeIndex - 1)
+              const oldItem = ['Empty']
+              const end = newArray.slice(activeIndex + 1)
+
+              pieceArray = pieceArray.concat(start, newItem, between, oldItem, end)
+
+            } else {
+              // item is moved to after
+              // 1<old> - 2 - 3 - 4<new> - 5
+              // 1 - 2<old> - 3 - 4<new> - 5
+              const start = newArray.slice(0, from)
+              const oldItem = ['Empty']
+              const between = newArray.slice(activeIndex + 1, overIndex)
+              const newItem = items[overContainer][activeIndex]
+              const end = newArray.slice(overIndex + 1)
+
+              pieceArray = pieceArray.concat(start, oldItem, between, newItem, end)
+            }
+
             setItems((items) => ({
               ...items,
-              [overContainer]: arrayMove(
-                items[overContainer],
-                activeIndex,
-                overIndex
-              ),
+              [overContainer]: pieceArray,
             }));
           }
         }
@@ -473,7 +543,7 @@ export function MultipleContainers({
               unstyled={minimal}
               onRemove={() => handleRemove(containerId)}
             >
-              <SortableContext items={items[containerId]} strategy={strategy}>
+              {/* <SortableContext items={items[containerId]} strategy={strategy}> */}
                 {items[containerId].map((value, index) => {
                   return (
                     <SortableItem
@@ -487,10 +557,46 @@ export function MultipleContainers({
                       renderItem={renderItem}
                       containerId={containerId}
                       getIndex={getIndex}
+                      isSelected={isSelected(value)}
+                      onMouseDown={(id: any, event: any) => {
+                        console.log('mouse down', event.target.id, event.target)
+                        // TODO: If we're 'over' the draggable handle, DONT add this mousedown function
+                        // We want to change to the 'moving' function instead of the 'selecting'
+                        if  (event.target.id.startsWith("body_")) {
+                          console.log('is body, should start selecting')
+                          setIsSelecting(true);
+                          setStartingContainer(findContainer(id))
+                          setStartingIndex(getIndex(id))
+                          setEndContainer(findContainer(id))
+                          setFinalIndex(getIndex(id))
+                          // console.log('mouse down!', event);
+                          // console.log('starting container/index: ' + findContainer(id) + ' ' + getIndex(id))
+                          event.stopPropagation();
+                          event.preventDefault();
+                        }
+                        
+                      }}
+                      onMouseUp={(id: any, event: any) => {
+                        // setEndContainer(findContainer(id))
+                        // setFinalIndex(getIndex(id))
+                        setIsSelecting(false);
+                        // console.log('mouse up!')
+                        // console.log('start container/index: ' + startingContainer + ' ' + startingIndex)
+                        // console.log('final container/index: ' + findContainer(id) + ' ' + getIndex(id))
+                      }}
+                      onMouseOver={(id: any, event: any) => {
+                        if (isSelecting) {
+                          setEndContainer(findContainer(id))
+                          setFinalIndex(getIndex(id))
+                          // console.log('new coords: ' + id)
+                          // console.log('new coords container/index: ' + findContainer(id) + ' ' + getIndex(id))
+                        }
+                      }}
+                      findContainer={findContainer}
                     />
                   );
                 })}
-              </SortableContext>
+              {/* </SortableContext> */}
             </DroppableContainer>
           ))}
           {minimal ? undefined : (
@@ -523,6 +629,39 @@ export function MultipleContainers({
   );
 
   function renderSortableItemDragOverlay(id: UniqueIdentifier) {
+    if (startingContainer !== null) {
+      console.log('----')
+      console.log(startingContainer, endContainer);
+      console.log(startingIndex, finalIndex);
+      console.log(containers);
+      console.log(items);
+      const itemsToRender = items[startingContainer].slice(startingIndex, finalIndex + 1) // end isnt included by default
+      // TODO: find container INDEX, not the container
+      return (
+        <>
+          {itemsToRender.map((item: any) => {
+            return <Item
+              value={item}
+              handle={handle}
+              style={getItemStyles({
+                containerId: findContainer(item) as UniqueIdentifier,
+                overIndex: -1,
+                index: getIndex(item),
+                value: item,
+                isSorting: true,
+                isDragging: true,
+                isDragOverlay: true,
+              })}
+              color={getColor(item)}
+              wrapperStyle={wrapperStyle({index: 0})}
+              renderItem={renderItem}
+              dragOverlay
+            />
+          })}
+        </>
+      )
+    }
+
     return (
       <Item
         value={id}
@@ -657,6 +796,11 @@ interface SortableItemProps {
   getIndex(id: UniqueIdentifier): number;
   renderItem(): React.ReactElement;
   wrapperStyle({index}: {index: number}): React.CSSProperties;
+  isSelected: boolean,
+  onMouseDown: any,
+  onMouseOver: any,
+  onMouseUp: any,
+  findContainer: any,
 }
 
 function SortableItem({
@@ -669,6 +813,10 @@ function SortableItem({
   containerId,
   getIndex,
   wrapperStyle,
+  isSelected,
+  onMouseDown,
+  onMouseOver,
+  onMouseUp,
 }: SortableItemProps) {
   const {
     setNodeRef,
@@ -686,12 +834,29 @@ function SortableItem({
   const mounted = useMountStatus();
   const mountedWhileDragging = isDragging && !mounted;
 
+  const color = isSelected ? '#7193f1' : '#ffda6c'
+
   return (
     <Item
       ref={disabled ? undefined : setNodeRef}
       value={id}
       dragging={isDragging}
       sorting={isSorting}
+      onMouseDown={(event: any) => onMouseDown(id, event)}
+      onMouseUp={(event: any) => onMouseUp(id, event)}
+      onMouseOver={(event: any) => onMouseOver(id, event)}
+      // onMouseUp={() => {
+      //   // setIsSelecting(false);
+      //   console.log('mouse up!')
+      //   console.log('final container/index: ' + findContainer(id) + ' ' + getIndex(id))
+      // }}
+      // onMouseOver={() => {
+      //   console.log('mouse over!')
+      //   if (isSelecting) {
+      //     console.log('new coords: ' + id)
+      //     console.log('new coords container/index: ' + findContainer(id) + ' ' + getIndex(id))
+      //   }
+      // }}
       handle={handle}
       handleProps={handle ? {ref: setActivatorNodeRef} : undefined}
       index={index}
@@ -704,7 +869,7 @@ function SortableItem({
         overIndex: over ? getIndex(over.id) : overIndex,
         containerId,
       })}
-      color={getColor(id)}
+      color={color} //getColor(id)}
       transition={transition}
       transform={transform}
       fadeIn={mountedWhileDragging}

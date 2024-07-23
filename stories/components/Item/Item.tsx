@@ -125,6 +125,7 @@ export const Item = React.memo(
           ref={ref}
         >
           <div
+            id={"body_" + value}
             className={classNames(
               styles.Item,
               dragging && styles.dragging,

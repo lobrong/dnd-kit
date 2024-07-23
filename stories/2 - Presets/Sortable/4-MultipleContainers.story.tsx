@@ -10,7 +10,7 @@ export default {
   title: 'Presets/Sortable/Multiple Containers',
 };
 
-export const BasicSetup = () => <MultipleContainers />;
+export const BasicSetup = () => <MultipleContainers handle />;
 
 export const DragHandle = () => <MultipleContainers handle />;
 
